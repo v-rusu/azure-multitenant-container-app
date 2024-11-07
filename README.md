@@ -2,7 +2,7 @@
 
 ## Overview
 
-This project provides a service to configure custom domains for Azure Container Apps, specifically designed to support **multitenant applications**. It automates the process of verifying DNS records and setting up SSL certificates, ensuring seamless integration with Azure services across multiple tenants [Azure Multi-tenant docs](https://learn.microsoft.com/en-us/azure/architecture/guide/multitenant/overview).
+This project provides a service to configure custom domains for Azure Container Apps, specifically designed to support **multitenant applications**. It automates the process of verifying DNS records and setting up SSL certificates. [Azure Multi-tenant docs](https://learn.microsoft.com/en-us/azure/architecture/guide/multitenant/overview).
 
 ## Features
 
