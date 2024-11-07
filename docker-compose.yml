@@ -1,0 +1,10 @@
+version: '3.8'
+
+services:
+  domain-service:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    restart: unless-stopped
+    env_file:
+      - ./.env

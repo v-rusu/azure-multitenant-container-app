@@ -1,0 +1,20 @@
+{
+  "name": "domain-service",
+  "version": "1.0.0",
+  "description": "Domain monitoring and configuration service",
+  "main": "dist/index.js",
+  "scripts": {
+    "build": "tsc",
+    "start": "node dist/index.js",
+    "dev": "ts-node src/index.ts"
+  },
+  "dependencies": {
+    "express": "^4.21.1"
+  },
+  "devDependencies": {
+    "@types/express": "^5.0.0",
+    "@types/node": "^22.9.0",
+    "ts-node": "^10.9.1",
+    "typescript": "^5.6.3"
+  }
+}
