@@ -1,109 +1,141 @@
 # Domain Service - Azure Container Apps Domain Configuration
 
-## Overview
+A microservice that manages custom domains and SSL certificates for Azure Container Apps in multi-tenant environments. It runs Azure CLI commands in a containerized environment and exposes a REST API for domain management.
 
-This project provides a service to configure custom domains for Azure Container Apps, specifically designed to support **multitenant applications**. It automates the process of verifying DNS records and setting up SSL certificates. 
+The basics of multi-tenant applications and Azure Container Apps:
 [Azure Multi-tenant docs](https://learn.microsoft.com/en-us/azure/architecture/guide/multitenant/overview).
+
+Custom domains and SSL certificates for Azure Container Apps:
 [Azure Container Apps docs](https://learn.microsoft.com/en-us/azure/container-apps/custom-domains-managed-certificates)
 
-## Features
+Working with a service principal:
+[Azure Service Principal docs](https://learn.microsoft.com/en-us/cli/azure/azure-cli-sp-tutorial-1)
 
-- **Automated DNS Verification**: Supports verification of A and TXT records.
-- **Azure Container Apps Configuration**: Automates the domain configuration process for multitenant environments.
-- **SSL Certificate Binding**: Automatically binds SSL certificates to the configured domains.
+Communication between microservices in container apps:
+[Azure Container Apps docs](https://learn.microsoft.com/en-us/azure/container-apps/communicate-between-microservices?pivots=docker-local&wt.mc_id=knwlserapi_inproduct_azportal&tabs=bash#communicate-between-container-apps)
 
-## Prerequisites
+## Overview
 
-Before you begin, ensure you have the following:
+This service helps you automate the process of:
+- Verifying DNS records (A, CNAME, TXT) for custom domains
+- Configuring custom domains in Azure Container Apps
+- Managing SSL certificates
+- Providing async status updates via webhooks
 
-1. **Azure Subscription**: Required to manage Azure resources.
-2. **Azure Service Principal**: Must have permissions to manage Container Apps and SSL certificates.
-3. **Docker and Docker Compose**: Needed to build and run the service.
-4. **DNS Access**: Ability to configure A and TXT records for domain verification.
+## Configuration
 
-## Installation
+1. Create a `.env` file based on the example:
+```env
+# Azure Authentication
+AZURE_SP_CLIENT_ID=<service_principal_id>
+AZURE_SP_CLIENT_SECRET=<service_principal_secret>
+AZURE_TENANT_ID=<azure_tenant_id>
 
-Follow these steps to set up and run the service:
-
-1. **Clone the Repository**:
-   ```bash
-   git clone <repository-url>
-   cd <repository-directory>
-   ```
-
-2. **Configure Environment Variables**:
-   Create a `.env` file in the root directory with the following variables:
-
-   ```env
-   # Azure Authentication
-   AZURE_SP_CLIENT_ID=<service_principal_id>
-   AZURE_SP_CLIENT_SECRET=<service_principal_secret>
-   AZURE_TENANT_ID=<azure_tenant_id>
-
-   # Azure Resources
-   AZURE_APP_NAME=<container_app_name>
-   AZURE_RESOURCE_GROUP=<resource_group_name>
-   AZURE_ENV_NAME=<environment_name>
-
-   # DNS Configuration
-   EXPECTED_A_RECORD=<ip_address>
-   EXPECTED_TXT_RECORD=<verification_value>
-
-   # Application Settings
-   PORT=3000
-   ```
-
-3. **Build and Start the Service**:
-   Use Docker Compose to build and start the service:
-
-   ```bash
-   docker-compose up --build
-   ```
-
-## How It Works
-
-1. **API Endpoint**: The service exposes an API endpoint `/process-domain` to process a single domain. It accepts a `domain` query parameter.
-
-2. **DNS Verification**: The service verifies that the A record matches the expected IP and the TXT record matches the expected verification value.
-
-3. **Azure Configuration**: It logs in to Azure using the service principal, adds the hostname to the Container App, and binds the SSL certificate.
-
-4. **Response Messages**: The service returns specific messages based on the success or failure of each step.
-
-## License
-
-This project is licensed under the MIT License. See the [LICENSE](LICENSE) file for more details.
-
-## Troubleshooting
-
-### Common Issues
-
-- **DNS Verification Fails**: Check DNS propagation, verify A and TXT records.
-- **Azure Authentication Fails**: Verify service principal credentials and permissions.
-- **Certificate Binding Fails**: Ensure DNS records are correct and check for existing bindings.
-
-### Logs
-
-For detailed error messages, check the Docker logs:
-
-```bash
-docker-compose logs domain-service
+# Azure Resources
+AZURE_APP_NAME=<container_app_name>
+AZURE_RESOURCE_GROUP=<resource_group_name>
+AZURE_ENV_NAME=<environment_name>
 ```
 
-## Security Notes
+2. Start the service using Docker Compose:
+```bash
+docker-compose up -d
+```
 
-- Store all credentials in secure environment variables.
-- Use the minimum required permissions for the service principal.
-- Regularly rotate service principal credentials.
-- Monitor Azure activity logs for any issues.
+## API Reference
 
-## Monitoring
+### Add Custom Domain
 
-Monitor the service through Docker logs and Azure Activity logs to ensure smooth operation.
+```http
+POST /api/domain
+Content-Type: application/json
 
-## Deployment
+{
+    "domain": "custom.example.com",
+    "callback": "https://your-callback-url.com/webhook",
+    "expectedCnameRecord": "your-app.azurecontainerapps.io",  // Optional
+    "expectedARecord": "1.2.3.4",                             // Optional
+    "expectedTxtRecord": "azure-verification=xyz123"
+}
+```
 
-1. Ensure all environment variables are set.
-2. Build and push the Docker image.
-3. Deploy using Docker Compose.
-4. Monitor logs for successful startup.
+Use a CNAME for subdomains and an A record for root domains. A records work for both subdomains and root domains.
+
+The service will:
+1. Verify DNS records match the expected values
+2. Configure the domain in Azure Container Apps
+3. Send a callback webhook with the result
+
+#### Callback Payload Examples
+
+Success:
+```json
+{
+    "status": "success",
+    "message": "Domain successfully connected",
+    "domain": "custom.example.com"
+}
+```
+
+Failure:
+```json
+{
+    "status": "error",
+    "message": "Configuration failed",
+    "domain": "custom.example.com"
+}
+```
+
+### Remove Custom Domain
+
+```http
+DELETE /api/domain
+Content-Type: application/json
+
+{
+    "domain": "custom.example.com"
+}
+```
+
+## DNS Configuration
+
+You need to configure your DNS records before using this service:
+
+1. **For CNAME setup:**
+   - CNAME record pointing to your Container App URL
+   - TXT record for domain verification
+
+2. **For A record setup:**
+   - A record pointing to your static IP
+   - TXT record for domain verification
+
+## Running with Docker Compose
+
+The service uses the following Docker Compose configuration:
+```yaml
+version: '3.8'
+
+services:
+  domain-service:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    restart: unless-stopped
+    env_file:
+      - ./.env
+    ports:
+      - "3001:3001"
+    dns:
+      - 8.8.8.8  # Google DNS
+      - 8.8.4.4  # Google DNS backup
+    dns_opt:
+      - timeout:2
+      - attempts:5
+```
+
+## Error Handling
+
+Common error responses:
+- `400 Bad Request`: Missing required parameters
+- `422 Unprocessable Entity`: DNS verification failed
+- `500 Internal Server Error`: Azure authentication or configuration errors
