@@ -3,7 +3,7 @@ import { processDomain, deleteDomain } from '../controllers/domain.controller';
 
 const router: Router = express.Router();
 
-router.post('/process', processDomain);
-router.delete('/delete', deleteDomain);
+router.post('/', processDomain);
+router.delete('/', deleteDomain);
 
 export default router; 
