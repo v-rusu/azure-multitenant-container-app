@@ -8,8 +8,6 @@ const resolve4 = promisify(dns.resolve4);
 
 export class DomainService {
   constructor(
-    private expectedARecord: string,
-    private expectedTxtRecord: string,
     private azureAppName: string,
     private azureResourceGroup: string,
     private azureEnvName: string,
@@ -18,21 +16,33 @@ export class DomainService {
     private azureTenantId: string
   ) {}
 
-  async checkDns(hostname: string): Promise<boolean> {
+  async checkDns(hostname: string, expectedTxtRecord: string, expectedCnameRecord?: string | null, expectedARecord?: string | null): Promise<boolean> {
     console.log(`Starting DNS check for hostname: ${hostname}`);
     try {
-      const aRecords = await resolve4(hostname);
-      console.log(`A records for ${hostname}:`, aRecords);
-      if (!aRecords.includes(this.expectedARecord)) {
-        console.log(`Expected A record ${this.expectedARecord} not found.`);
-        return false;
+      if (expectedARecord) {
+        const aRecords = await resolve4(hostname);
+        console.log(`A records for ${hostname}:`, aRecords);
+        if (!aRecords.includes(expectedARecord)) {
+          console.log(`Expected A record ${expectedARecord} not found.`);
+          return false;
+        }
+      }
+
+      if (expectedCnameRecord) {
+        const resolveCname = promisify(dns.resolveCname);
+        const cnameRecords = await resolveCname(hostname);
+        console.log(`CNAME records for ${hostname}:`, cnameRecords);
+        if (!cnameRecords.includes(expectedCnameRecord)) {
+          console.log(`Expected CNAME record ${expectedCnameRecord} not found.`);
+          return false;
+        }
       }
 
       const txtRecords = await resolveTxt(`asuid.${hostname}`);
       const flatTxtRecords = txtRecords.map(record => record.join(''));
       console.log(`TXT records for asuid.${hostname}:`, flatTxtRecords);
-      if (!flatTxtRecords.includes(this.expectedTxtRecord)) {
-        console.log(`Expected TXT record ${this.expectedTxtRecord} not found.`);
+      if (!flatTxtRecords.includes(expectedTxtRecord)) {
+        console.log(`Expected TXT record ${expectedTxtRecord} not found.`);
         return false;
       }
 
@@ -70,7 +80,7 @@ export class DomainService {
     }
   }
 
-  async configureHostname(hostname: string): Promise<boolean> {
+  async configureHostname(hostname: string, validationMethod: string): Promise<boolean> {
     console.log(`Configuring hostname: ${hostname}`);
     try {
       await execAsync(
@@ -79,7 +89,7 @@ export class DomainService {
       console.log(`Hostname ${hostname} added to container app.`);
 
       await execAsync(
-        `az containerapp hostname bind -n ${this.azureAppName} -g ${this.azureResourceGroup} --hostname ${hostname} -e ${this.azureEnvName}`
+        `az containerapp hostname bind -n ${this.azureAppName} -g ${this.azureResourceGroup} --hostname ${hostname} -e ${this.azureEnvName} --validation-method ${validationMethod}`
       );
       console.log(`Hostname ${hostname} bound to environment ${this.azureEnvName}.`);
 
@@ -98,9 +108,25 @@ export class DomainService {
     console.log(`Deleting hostname: ${hostname}`);
     try {
       await execAsync(
-        `az containerapp hostname delete -n ${this.azureAppName} -g ${this.azureResourceGroup} --hostname ${hostname}`
+        `az containerapp hostname delete -n ${this.azureAppName} -g ${this.azureResourceGroup} --hostname ${hostname} --yes`
       );
       console.log(`Hostname ${hostname} deleted from container app.`);
+
+      const { stdout } = await execAsync(
+        `az containerapp env certificate list -g ${this.azureResourceGroup} --name ${this.azureEnvName}`
+      );
+      const certificates = JSON.parse(stdout);
+      const certificate = certificates.find((c: any) => c.properties.subjectName === hostname);
+      if (certificate) {
+        console.log(`Certificate ID for ${hostname}: ${certificate.id}`);
+      } else {
+        console.log(`Certificate ${hostname} not found.`);
+      }
+
+      await execAsync(
+        `az containerapp env certificate delete -g ${this.azureResourceGroup} --name ${this.azureEnvName} --certificate ${certificate.id} --yes`
+      );
+      console.log(`Certificate ${certificate.id} deleted.`);
       return true;
     } catch (error) {
       console.error(`Failed to delete hostname ${hostname}:`, error);

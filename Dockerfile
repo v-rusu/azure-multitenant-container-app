@@ -10,12 +10,19 @@ RUN apt-get update && apt-get install -y \
 # Install Azure CLI
 RUN curl -sL https://aka.ms/InstallAzureCLIDeb | bash
 
+# Install Azure Container Apps extension
+RUN az extension add --name containerapp --upgrade --allow-preview true
+
 WORKDIR /app
 
 COPY package*.json ./
 RUN npm install
 
 COPY . .
+
+EXPOSE 3001
+
+ENV PORT=3001
 
 RUN npm run build
 

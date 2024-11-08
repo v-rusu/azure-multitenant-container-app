@@ -8,3 +8,12 @@ services:
     restart: unless-stopped
     env_file:
       - ./.env
+    ports:
+      - "3001:3001"
+    dns:
+      - 8.8.8.8  # Google DNS
+      - 8.8.4.4  # Google DNS backup
+    # Optional: configure DNS options
+    dns_opt:
+      - timeout:2
+      - attempts:5
